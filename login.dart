@@ -1,5 +1,8 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'dashboard.dart'; // Import dashboard screen
+import 'register.dart'; // <<< ADDED: Import registration screen
 
 // ----------------------------------------------------------------------
 // --- 1. LOGIN SCREEN (Initial View) ---
@@ -28,6 +31,14 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // Navigate to RegisterScreen
+  void _navigateToRegister() {
+    // Pushes the RegisterScreen onto the stack, allowing the user to go back
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const RegisterScreen()),
+    );
+  }
+
   // Dummy login function for demonstration
   void _login() {
     // In a real app, you'd check credentials here.
@@ -52,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
             end: Alignment.bottomCenter,
             colors: [
               Color(0xFF5B9BD5), // Blue
-              primaryColor,      // Teal
+              primaryColor,// Teal
             ],
           ),
         ),
@@ -343,10 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () {
-                              // Navigate to registration screen
-                              // TODO: Implement registration screen
-                            },
+                            onPressed: _navigateToRegister, // <<< MODIFIED: Calls new navigation method
                             style: TextButton.styleFrom(
                               padding: EdgeInsets.zero,
                               minimumSize: Size.zero,
