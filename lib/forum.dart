@@ -18,32 +18,32 @@ class ForumContent extends StatelessWidget {
   static final List<_Post> _posts = <_Post>[
     // ...same demo posts...
     _Post(
-      user: 'User-123',
+      user: 'Conchitoww',
       title: 'Feeling overwhelmed today',
       snippet: 'Lorum ipsum thoughts about busyness...',
       comments: 5,
-      avatar: const CircleAvatar(backgroundColor: Color(0xFFE3F2FD), child: Icon(Icons.help, color: Color(0xFF5B9BD5))),
+      avatar: const CircleAvatar(backgroundImage: AssetImage('assets/profile1.jpg'), backgroundColor: Colors.transparent),
     ),
     _Post(
-      user: 'User-456',
+      user: 'Cheetos',
       title: 'Shared my feelings for the first time',
       snippet: 'Therapist: Blip response, watery small steps...',
       comments: 5,
       avatar: const CircleAvatar(backgroundImage: AssetImage('assets/anime.jpg'), backgroundColor: Colors.transparent),
     ),
     _Post(
-      user: 'User-789',
+      user: 'Itsyourboy_con',
       title: 'Shared my feelings for the first time',
       snippet: 'Lencett, thanks! How did you...',
       comments: 2,
-      avatar: const CircleAvatar(backgroundImage: AssetImage('assets/avatar_2.png'), backgroundColor: Colors.transparent),
+      avatar: const CircleAvatar(backgroundImage: AssetImage('assets/Ledesma_Conchito.png'), backgroundColor: Colors.transparent),
     ),
     _Post(
-      user: 'User-789',
+      user: 'Just_Con',
       title: 'How you cope with anxiety?',
       snippet: 'Exercising, journaling, or would you suggest...',
       comments: 15,
-      avatar: const CircleAvatar(backgroundImage: AssetImage('assets/avatar_3.png'), backgroundColor: Colors.transparent),
+      avatar: const CircleAvatar(backgroundImage: AssetImage('assets/Me.jpg'), backgroundColor: Colors.transparent),
     ),
   ];
 
@@ -84,7 +84,7 @@ class ForumContent extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Text(
-                      'Anonymous Forum', // was: 'Anonymous Forum'
+                      'Community Forum', // fixed: was empty
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 26,

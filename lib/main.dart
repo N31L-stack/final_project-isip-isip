@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login.dart';
 import 'forum.dart'; // Import forum screen
+import 'onboarding.dart'; // ADD
+import 'register.dart';  // ADD
 
 void main() {
   runApp(const MyApp());
@@ -26,9 +28,12 @@ class MyApp extends StatelessWidget {
       ),
       navigatorKey: navigatorKey, // NEW
       routes: {
-        '/forum': (context) => const ForumScreen(), // Named route for forum screen
+        '/forum': (context) => const ForumScreen(),
+        '/onboarding': (context) => const OnboardingScreen(), // ADD
+        '/login': (context) => const LoginScreen(),           // ADD
+        '/register': (context) => const RegisterScreen(),     // ADD
       },
-      onGenerateRoute: (settings) { // NEW: fallback if 'forum' used without leading slash
+      onGenerateRoute: (settings) {
         if (settings.name == 'forum') {
           return MaterialPageRoute(builder: (_) => const ForumScreen());
         }
@@ -129,12 +134,9 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              const LoginScreen(),
+              const OnboardingScreen(), // CHANGED from LoginScreen
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
+            return FadeTransition(opacity: animation, child: child);
           },
           transitionDuration: const Duration(milliseconds: 800),
         ),
