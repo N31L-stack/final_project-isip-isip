@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'resources.dart';
 import 'professionals.dart';
 import 'forum.dart'; // ADD: use ForumScreen from forum.dart
+import 'settings.dart'; // ADD
 
 // --- 1. ROOT SCREEN WITH 5-TAB NAVIGATION ---
 class RootScreen extends StatefulWidget {
@@ -15,40 +15,31 @@ class RootScreen extends StatefulWidget {
 class _RootScreenState extends State<RootScreen> {
   int _selectedIndex = 0;
 
-  // REPLACE this list with the one below
   late final List<Widget> _widgetOptions = <Widget>[
-    const DashboardScreen(),
-    const Center(child: Text('Journal Module')),
-    const ProfessionalPage(),
-    const ForumContent(), // USE forum.dart UI
-    const Center(child: Text('Settings & Metrics')),
+    const DashboardScreen(),               // 0
+    const Center(child: Text('Journal')),  // 1
+    const ProfessionalPage(),              // 2
+    const ForumContent(),                  // 3
+    const SettingsScreen(),                // 4 ADD
   ];
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: _widgetOptions[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.book_outlined), activeIcon: Icon(Icons.book), label: 'Journal'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), activeIcon: Icon(Icons.people_alt), label: 'Professionals'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), activeIcon: Icon(Icons.chat_bubble), label: 'Forum'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), activeIcon: Icon(Icons.settings), label: 'Settings'),
-        ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey.shade600,
-        backgroundColor: Colors.white,
-        type: BottomNavigationBarType.fixed,
-        elevation: 10,
         onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.book_outlined), label: 'Journal'),
+          BottomNavigationBarItem(icon: Icon(Icons.medical_services_outlined), label: 'Help'),
+          BottomNavigationBarItem(icon: Icon(Icons.forum_outlined), label: 'Forum'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'), // ADD
+        ],
       ),
     );
   }

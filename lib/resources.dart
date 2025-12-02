@@ -119,7 +119,7 @@ class ResourcesScreen extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String text;
-  const _SectionTitle(this.text, {super.key});
+  const _SectionTitle(this.text);
 
   @override
   Widget build(BuildContext context) {
