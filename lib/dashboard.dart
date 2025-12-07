@@ -3,6 +3,7 @@ import 'dart:async';
 import 'professionals.dart';
 import 'forum.dart'; // ADD: use ForumScreen from forum.dart
 import 'settings.dart'; // ADD
+import 'journal.dart';
 
 // --- 1. ROOT SCREEN WITH 5-TAB NAVIGATION ---
 class RootScreen extends StatefulWidget {
@@ -16,12 +17,12 @@ class _RootScreenState extends State<RootScreen> {
   int _selectedIndex = 0;
 
   late final List<Widget> _widgetOptions = <Widget>[
-    const DashboardScreen(),               // 0
-    const Center(child: Text('Journal')),  // 1
-    const ProfessionalPage(),              // 2
-    const ForumContent(),                  // 3
-    const SettingsScreen(),                // 4 ADD
-  ];
+  const DashboardScreen(),               // 0
+  const JournalScreen(),                 // 1 
+  const ProfessionalPage(),              // 2
+  const ForumContent(),                  // 3
+  const SettingsScreen(),                // 4
+];
 
   void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login.dart';
-import 'forum.dart'; // Import forum screen
-import 'onboarding.dart'; // ADD
-import 'register.dart';  // ADD
+import 'forum.dart'; 
+import 'onboarding.dart';
+import 'register.dart';
 
 void main() {
   runApp(const MyApp());

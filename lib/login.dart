@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dashboard.dart';
+import 'admin_main.dart';
+import 'admin_setting.dart'; // Import to access admin credentials
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,19 +14,67 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   static const double commonRadius = 12.0;
   static const double smallSpacing = 8.0;
   static const Color primaryColor = Color(0xFF4DB8B8);
 
-  void _navigateToDashboard() {
+  // Get admin credentials from AdminSetting class
+  String get adminEmail => AdminSetting.adminEmail;
+  String get adminPassword => AdminSetting.adminPassword;
+
+  void _login() {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (username.isEmpty || password.isEmpty) {
+      _showError('Please enter both username and password');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    // Simulate login delay
+    Future.delayed(const Duration(seconds: 1), () {
+      setState(() => _isLoading = false);
+
+      // Check if admin credentials (now synced with AdminSetting)
+      if (username == adminEmail && password == adminPassword) {
+        _navigateToAdminDashboard();
+      } else {
+        // For demo purposes, any other credentials go to client dashboard
+        // In a real app, you'd validate against a database
+        _navigateToClientDashboard();
+      }
+    });
+  }
+
+  void _navigateToAdminDashboard() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const AdminMain()),
+    );
+  }
+
+  void _navigateToClientDashboard() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (context) => const RootScreen()),
     );
   }
 
-  void _login() => _navigateToDashboard();
-  void _loginWithGoogle() => _navigateToDashboard();
+  void _loginWithGoogle() {
+    // For demo, Google login always goes to client dashboard
+    _navigateToClientDashboard();
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade400,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,21 +134,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Color(0xFF333333),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Login as Client or Admin',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF666666),
+                      ),
+                    ),
                     const SizedBox(height: 24),
 
-                    // Username
+                    // Username/Email
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Username',
+                          'Email / Username',
                           style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
                         ),
                         const SizedBox(height: smallSpacing),
                         TextField(
                           controller: _usernameController,
                           decoration: InputDecoration(
-                            hintText: 'Username',
+                            hintText: 'Enter your email or username',
                             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
                             prefixIcon: Icon(Icons.person_outline,
                                 color: Colors.grey[400], size: 20),
@@ -178,6 +236,32 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // Admin Hint (now shows current admin email)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Admin access: $adminEmail',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton(
@@ -203,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _login,
+                        onPressed: _isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: Colors.white,
@@ -213,10 +297,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           elevation: 5,
                         ),
-                        child: const Text(
-                          'Login',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Login',
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -235,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Google login (placeholder)
+                    // Google login
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -261,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Prompt
+                    // Register prompt
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
