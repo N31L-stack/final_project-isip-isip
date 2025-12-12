@@ -1,4 +1,149 @@
+// lib/journal.dart
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
+// --- FIREBASE JOURNAL ENTRY MODEL ---
+class FirebaseJournalEntry {
+  final String? id;
+  final String title;
+  final String content;
+  final String mood;
+  final List<String> tags;
+  final Timestamp? timestamp;
+  final Timestamp? lastUpdated;
+
+  FirebaseJournalEntry({
+    this.id,
+    required this.title,
+    required this.content,
+    required this.mood,
+    this.tags = const [],
+    this.timestamp,
+    this.lastUpdated,
+  });
+
+  // Convert to JSON for Firestore
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'content': content,
+      'mood': mood,
+      'tags': tags,
+      'timestamp': FieldValue.serverTimestamp(),
+      'date': _getCurrentDateString(),
+    };
+  }
+
+  // Convert to JSON for updates
+  Map<String, dynamic> toUpdateJson() {
+    return {
+      'title': title,
+      'content': content,
+      'mood': mood,
+      'tags': tags,
+      'lastUpdated': FieldValue.serverTimestamp(),
+    };
+  }
+
+  // Create from Firestore document
+  factory FirebaseJournalEntry.fromJson(Map<String, dynamic> json, String id) {
+    return FirebaseJournalEntry(
+      id: id,
+      title: json['title'] ?? 'Untitled',
+      content: json['content'] ?? '',
+      mood: json['mood'] ?? 'Neutral',
+      tags: List<String>.from(json['tags'] ?? []),
+      timestamp: json['timestamp'] as Timestamp?,
+      lastUpdated: json['lastUpdated'] as Timestamp?,
+    );
+  }
+
+  static String _getCurrentDateString() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+}
+
+// --- JOURNAL SERVICE ---
+class JournalService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Get journal entries stream
+  Stream<List<FirebaseJournalEntry>> getJournalEntriesStream() {
+    final user = _auth.currentUser;
+    if (user == null) return Stream.value([]);
+
+    return _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('journal_entries')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => FirebaseJournalEntry.fromJson(doc.data(), doc.id))
+          .toList();
+    });
+  }
+
+  // Create journal entry
+  Future<void> createJournalEntry(FirebaseJournalEntry entry) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('journal_entries')
+          .add(entry.toJson());
+    } catch (e) {
+      print('Error creating journal entry: $e');
+      rethrow;
+    }
+  }
+
+  // Update journal entry
+  Future<void> updateJournalEntry(FirebaseJournalEntry entry) async {
+    final user = _auth.currentUser;
+    if (user == null || entry.id == null) throw Exception('Invalid entry or no user logged in');
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('journal_entries')
+          .doc(entry.id)
+          .update(entry.toUpdateJson());
+    } catch (e) {
+      print('Error updating journal entry: $e');
+      rethrow;
+    }
+  }
+
+  // Delete journal entry
+  Future<void> deleteJournalEntry(String id) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user logged in');
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('journal_entries')
+          .doc(id)
+          .delete();
+    } catch (e) {
+      print('Error deleting journal entry: $e');
+      rethrow;
+    }
+  }
+}
 
 // --- JOURNAL SCREEN ---
 class JournalScreen extends StatefulWidget {
@@ -9,54 +154,75 @@ class JournalScreen extends StatefulWidget {
 }
 
 class _JournalScreenState extends State<JournalScreen> {
-  // Mock journal entries - in a real app, these would come from a database
-  final List<JournalEntry> _entries = [
-    JournalEntry(
-      id: '1',
-      title: 'A Productive Monday',
-      content: 'Today was a great day. I managed to complete all my tasks and felt really accomplished. The morning meditation helped me stay focused throughout the day.',
-      mood: 'Happy',
-      date: DateTime.now().subtract(const Duration(days: 2)),
-      tags: ['productive', 'grateful'],
-    ),
-    JournalEntry(
-      id: '2',
-      title: 'Feeling Overwhelmed',
-      content: 'Work has been quite stressful lately. I need to remember to take breaks and not be too hard on myself. Tomorrow I will try to practice more self-compassion.',
-      mood: 'Stressed',
-      date: DateTime.now().subtract(const Duration(days: 1)),
-      tags: ['work', 'stress'],
-    ),
-  ];
+  final JournalService _journalService = JournalService();
+  Stream<List<FirebaseJournalEntry>>? _journalsStream;
+  User? _currentUser;
+  int _totalEntries = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      setState(() {
+        _currentUser = user;
+        if (user != null) {
+          _journalsStream = _journalService.getJournalEntriesStream();
+          _loadTotalEntries();
+        } else {
+          _journalsStream = null;
+        }
+      });
+    });
+  }
+
+  Future<void> _loadTotalEntries() async {
+    if (_currentUser == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .collection('journal_entries')
+          .get();
+      setState(() => _totalEntries = snapshot.docs.length);
+    } catch (e) {
+      print('Error loading total entries: $e');
+    }
+  }
 
   void _addNewEntry() {
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to create a journal entry.')),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => JournalEntryEditor(
-          onSave: (entry) {
-            setState(() {
-              _entries.insert(0, entry);
-            });
+          onSave: (entry) async {
+            await _journalService.createJournalEntry(entry);
+            await _loadTotalEntries();
           },
         ),
       ),
     );
   }
 
-  void _editEntry(JournalEntry entry) {
+  void _editEntry(FirebaseJournalEntry entry) {
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to edit journal entries.')),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => JournalEntryEditor(
           entry: entry,
-          onSave: (updatedEntry) {
-            setState(() {
-              final index = _entries.indexWhere((e) => e.id == updatedEntry.id);
-              if (index != -1) {
-                _entries[index] = updatedEntry;
-              }
-            });
+          onSave: (updatedEntry) async {
+            await _journalService.updateJournalEntry(updatedEntry);
           },
         ),
       ),
@@ -64,23 +230,28 @@ class _JournalScreenState extends State<JournalScreen> {
   }
 
   void _deleteEntry(String id) {
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to delete journal entries.')),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Entry?'),
-        content: const Text('This action cannot be undone. Are you sure you want to delete this journal entry?'),
+        content: const Text('This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _entries.removeWhere((entry) => entry.id == id);
-              });
+            onPressed: () async {
+              await _journalService.deleteJournalEntry(id);
               Navigator.pop(context);
+              await _loadTotalEntries();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Journal entry deleted')),
               );
@@ -107,16 +278,15 @@ class _JournalScreenState extends State<JournalScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header
               Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'My Journal',
                           style: TextStyle(
                             fontSize: 28,
@@ -124,10 +294,10 @@ class _JournalScreenState extends State<JournalScreen> {
                             color: Color(0xFF333333),
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          'Express your thoughts and feelings',
-                          style: TextStyle(
+                          'Entries: $_totalEntries',
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Color(0xFF666666),
                           ),
@@ -154,51 +324,83 @@ class _JournalScreenState extends State<JournalScreen> {
                   ],
                 ),
               ),
-
-              // Journal Entries List
               Expanded(
-                child: _entries.isEmpty
+                child: _currentUser == null
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.book_outlined,
+                              Icons.login,
                               size: 80,
                               color: Colors.grey.shade400,
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No journal entries yet',
+                              'Please log in to view your journals',
                               style: TextStyle(
                                 fontSize: 18,
                                 color: Colors.grey.shade600,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap + to create your first entry',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: _entries.length,
-                        itemBuilder: (context, index) {
-                          final entry = _entries[index];
-                          return JournalEntryCard(
-                            entry: entry,
-                            onTap: () => _editEntry(entry),
-                            onDelete: () => _deleteEntry(entry.id),
-                          );
-                        },
-                      ),
+                    : _journalsStream == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : StreamBuilder<List<FirebaseJournalEntry>>(
+                            stream: _journalsStream,
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return const Center(child: CircularProgressIndicator());
+                              }
+                              if (snapshot.hasError) {
+                                return Center(
+                                  child: Text(
+                                    'Error: ${snapshot.error}',
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                );
+                              }
+                              final entries = snapshot.data ?? [];
+                              if (entries.isEmpty) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.book_outlined,
+                                        size: 80,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No journal entries yet',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey.shade600,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                              return ListView.builder(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                itemCount: entries.length,
+                                itemBuilder: (context, index) {
+                                  final entry = entries[index];
+                                  return JournalEntryCard(
+                                    entry: entry,
+                                    onTap: () => _editEntry(entry),
+                                    onDelete: () => _deleteEntry(entry.id!),
+                                  );
+                                },
+                              );
+                            },
+                          ),
               ),
             ],
           ),
@@ -210,7 +412,7 @@ class _JournalScreenState extends State<JournalScreen> {
 
 // --- JOURNAL ENTRY CARD ---
 class JournalEntryCard extends StatelessWidget {
-  final JournalEntry entry;
+  final FirebaseJournalEntry entry;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
@@ -239,36 +441,22 @@ class JournalEntryCard extends StatelessWidget {
     }
   }
 
-  Color _darkenColor(Color color, [double amount = 0.4]) {
-    assert(amount >= 0 && amount <= 1);
-    final hsl = HSLColor.fromColor(color);
-    final lightness = (hsl.lightness - amount).clamp(0.0, 1.0);
-    return hsl.withLightness(lightness).toColor();
-  }
-
-  String _formatDate(DateTime date) {
+  String _formatDate(Timestamp? timestamp) {
+    if (timestamp == null) return 'Unknown Date';
+    
+    final date = timestamp.toDate();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = DateTime(now.year, now.month, now.day - 1);
     final dateToCheck = DateTime(date.year, date.month, date.day);
 
     if (dateToCheck == today) {
-      return 'Today, ${_getMonthName(date.month)} ${date.day}';
+      return 'Today, ${DateFormat.MMMd().format(date)}';
     } else if (dateToCheck == yesterday) {
-      return 'Yesterday, ${_getMonthName(date.month)} ${date.day}';
+      return 'Yesterday, ${DateFormat.MMMd().format(date)}';
     } else {
-      return '${_getDayName(date.weekday)}, ${_getMonthName(date.month)} ${date.day}, ${date.year}';
+      return DateFormat.yMMMEd().format(date);
     }
-  }
-
-  String _getDayName(int weekday) {
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    return days[weekday - 1];
-  }
-
-  String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months[month - 1];
   }
 
   @override
@@ -294,13 +482,12 @@ class JournalEntryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with date and mood
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
                     child: Text(
-                      _formatDate(entry.date),
+                      _formatDate(entry.timestamp),
                       style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF666666),
@@ -320,7 +507,7 @@ class JournalEntryCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: _darkenColor(_getMoodColor(entry.mood)),
+                            color: _getMoodColor(entry.mood),
                           ),
                         ),
                       ),
@@ -336,7 +523,6 @@ class JournalEntryCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              // Title
               Text(
                 entry.title,
                 style: const TextStyle(
@@ -348,7 +534,6 @@ class JournalEntryCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 8),
-              // Content preview
               Text(
                 entry.content,
                 style: TextStyle(
@@ -392,8 +577,8 @@ class JournalEntryCard extends StatelessWidget {
 
 // --- JOURNAL ENTRY EDITOR ---
 class JournalEntryEditor extends StatefulWidget {
-  final JournalEntry? entry;
-  final Function(JournalEntry) onSave;
+  final FirebaseJournalEntry? entry;
+  final Future<void> Function(FirebaseJournalEntry) onSave;
 
   const JournalEntryEditor({
     super.key,
@@ -411,16 +596,10 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
   late TextEditingController _tagController;
   String _selectedMood = 'Neutral';
   final List<String> _tags = [];
+  bool _isSaving = false;
 
   final List<String> _moods = [
-    'Wonderful',
-    'Happy',
-    'Calm',
-    'Neutral',
-    'Tired',
-    'Stressed',
-    'Sad',
-    'Anxious',
+    'Wonderful', 'Happy', 'Calm', 'Neutral', 'Tired', 'Stressed', 'Sad', 'Anxious',
   ];
 
   @override
@@ -446,12 +625,10 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
   }
 
   void _removeTag(String tag) {
-    setState(() {
-      _tags.remove(tag);
-    });
+    setState(() => _tags.remove(tag));
   }
 
-  void _saveEntry() {
+  void _saveEntry() async {
     if (_titleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add a title')),
@@ -466,28 +643,48 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
       return;
     }
 
-    final entry = JournalEntry(
-      id: widget.entry?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      title: _titleController.text.trim(),
-      content: _contentController.text.trim(),
-      mood: _selectedMood,
-      date: widget.entry?.date ?? DateTime.now(),
-      tags: _tags,
-    );
+    setState(() => _isSaving = true);
 
-    widget.onSave(entry);
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Journal entry saved!')),
-    );
+    try {
+      final entryToSave = FirebaseJournalEntry(
+        id: widget.entry?.id,
+        title: _titleController.text.trim(),
+        content: _contentController.text.trim(),
+        mood: _selectedMood,
+        tags: List.from(_tags),
+        timestamp: widget.entry?.timestamp,
+      );
+
+      await widget.onSave(entryToSave);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Journal entry saved!'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
-  String _formatDate(DateTime date) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                    'July', 'August', 'September', 'October', 'November', 'December'];
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
-    return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}, ${date.year}';
+  String _formatDate(Timestamp? timestamp) {
+    if (timestamp == null) {
+      return DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now());
+    }
+    final date = timestamp.toDate();
+    return DateFormat('EEEE, MMMM d, yyyy').format(date);
   }
 
   @override
@@ -499,10 +696,10 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
         title: Text(widget.entry == null ? 'New Journal Entry' : 'Edit Entry'),
         actions: [
           TextButton(
-            onPressed: _saveEntry,
-            child: const Text(
-              'Save',
-              style: TextStyle(
+            onPressed: _isSaving ? null : _saveEntry,
+            child: Text(
+              _isSaving ? 'Saving...' : 'Save',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -524,9 +721,8 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Date display
               Text(
-                _formatDate(widget.entry?.date ?? DateTime.now()),
+                _formatDate(widget.entry?.timestamp),
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade700,
@@ -534,8 +730,6 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Title field
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -562,8 +756,6 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Mood selector
               const Text(
                 'How are you feeling?',
                 style: TextStyle(
@@ -588,15 +780,6 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
                         border: Border.all(
                           color: isSelected ? const Color(0xFF5B9BD5) : Colors.grey.shade300,
                         ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: const Color(0xFF5B9BD5).withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
                       ),
                       child: Text(
                         mood,
@@ -610,8 +793,6 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
                 }).toList(),
               ),
               const SizedBox(height: 20),
-
-              // Content field
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -629,15 +810,13 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
                   maxLines: 12,
                   style: const TextStyle(fontSize: 16, height: 1.5),
                   decoration: const InputDecoration(
-                    hintText: 'Write your thoughts here...\n\nWhat happened today? How did it make you feel?',
+                    hintText: 'Write your thoughts here...',
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.all(16),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Tags section
               const Text(
                 'Tags (optional)',
                 style: TextStyle(
@@ -731,23 +910,4 @@ class _JournalEntryEditorState extends State<JournalEntryEditor> {
     _tagController.dispose();
     super.dispose();
   }
-}
-
-// --- JOURNAL ENTRY MODEL ---
-class JournalEntry {
-  final String id;
-  final String title;
-  final String content;
-  final String mood;
-  final DateTime date;
-  final List<String> tags;
-
-  JournalEntry({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.mood,
-    required this.date,
-    required this.tags,
-  });
 }
